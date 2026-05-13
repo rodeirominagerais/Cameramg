@@ -31,7 +31,10 @@ builder.Services.AddScoped<SlugService>();
 builder.Services.AddScoped<PasswordEmailService>();
 builder.Services.AddScoped<OuvidoriaEmailService>();
 builder.Services.AddScoped<SeedService>();
+builder.Services.Configure<GoogleDriveBackupOptions>(builder.Configuration.GetSection("GoogleDriveBackup"));
 builder.Services.AddScoped<BackupService>();
+builder.Services.AddHttpClient<GoogleDriveBackupService>();
+builder.Services.AddHostedService<BackupHostedService>();
 
 var jwt = builder.Configuration.GetSection("Jwt").Get<JwtOptions>() ?? new JwtOptions();
 

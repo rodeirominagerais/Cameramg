@@ -1,5 +1,8 @@
+using System.Security.Claims;
 using System.Text.Json;
 using Cameramg.Data;
+using Cameramg.Dtos;
+using Cameramg.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -45,6 +48,80 @@ public class FaqController(AppDbContext db) : ControllerBase
         var item = await db.AdminRegistros.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id && x.Tipo == "FAQ" && x.Ativo);
         if (item is null) return NotFound(new { erro = "Pergunta frequente não encontrada." });
         return Ok(NormalizarFaq(item.Id, item.Titulo, item.Status, item.DadosJson, item.CriadoEm, item.AtualizadoEm));
+    }
+
+
+
+    [HttpGet("categorias")]
+    public async Task<IActionResult> Categorias()
+    {
+        var lista = await db.AdminRegistros.AsNoTracking()
+            .Where(x => x.Tipo == "FAQ" && x.Ativo && x.Status != "Arquivado" && x.Status != "Inativo")
+            .Select(x => x.DadosJson)
+            .ToListAsync();
+
+        var categorias = lista
+            .Select(Json)
+            .Select(d => Get(d, "categoria", "grupo"))
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x)
+            .ToList();
+
+        var padrao = new[] { "Perguntas Gerais", "Lei de Acesso à Informação", "Licitações", "Protocolos", "Transparência", "Ouvidoria", "E-SIC" };
+        return Ok(padrao.Concat(categorias).Distinct(StringComparer.OrdinalIgnoreCase));
+    }
+
+    [HttpPost, Authorize(Policy = "Editor")]
+    public async Task<IActionResult> Criar(AdminRegistroDto dto)
+    {
+        var item = new AdminRegistro
+        {
+            UsuarioId = Uid(),
+            Tipo = "FAQ",
+            Titulo = TituloFaq(dto),
+            Status = StatusFaq(dto.Status),
+            DadosJson = dto.DadosJson,
+            Ativo = dto.Ativo && !StatusInativo(dto.Status),
+            CriadoEm = DateTime.UtcNow
+        };
+
+        db.AdminRegistros.Add(item);
+        await db.SaveChangesAsync();
+        return CreatedAtAction(nameof(Obter), new { id = item.Id }, NormalizarFaq(item.Id, item.Titulo, item.Status, item.DadosJson, item.CriadoEm, item.AtualizadoEm));
+    }
+
+    [HttpPut("{id:long}"), Authorize(Policy = "Editor")]
+    public async Task<IActionResult> Atualizar(long id, AdminRegistroDto dto)
+    {
+        var item = await db.AdminRegistros.FirstOrDefaultAsync(x => x.Id == id && x.Tipo == "FAQ");
+        if (item is null) return NotFound(new { erro = "Pergunta frequente não encontrada." });
+
+        var uid = Uid();
+        if (!IsAdmin() && uid.HasValue && item.UsuarioId != uid.Value) return Forbid();
+
+        item.Titulo = TituloFaq(dto);
+        item.Status = StatusFaq(dto.Status);
+        item.DadosJson = dto.DadosJson;
+        item.Ativo = dto.Ativo && !StatusInativo(dto.Status);
+        item.AtualizadoEm = DateTime.UtcNow;
+
+        await db.SaveChangesAsync();
+        return Ok(NormalizarFaq(item.Id, item.Titulo, item.Status, item.DadosJson, item.CriadoEm, item.AtualizadoEm));
+    }
+
+    [HttpDelete("{id:long}"), Authorize(Policy = "Editor")]
+    public async Task<IActionResult> Remover(long id)
+    {
+        var item = await db.AdminRegistros.FirstOrDefaultAsync(x => x.Id == id && x.Tipo == "FAQ");
+        if (item is null) return NoContent();
+
+        var uid = Uid();
+        if (!IsAdmin() && uid.HasValue && item.UsuarioId != uid.Value) return Forbid();
+
+        db.AdminRegistros.Remove(item);
+        await db.SaveChangesAsync();
+        return NoContent();
     }
 
     private sealed class FaqDto
@@ -109,4 +186,20 @@ public class FaqController(AppDbContext db) : ControllerBase
 
     private static string Get(Dictionary<string, string> d, params string[] keys) =>
         keys.Select(k => d.TryGetValue(k, out var v) ? v : "").FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? "";
+
+    private long? Uid() => long.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;
+
+    private bool IsAdmin() => string.Equals(User.FindFirstValue(ClaimTypes.Role), "admin", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(User.FindFirstValue("perfil"), "admin", StringComparison.OrdinalIgnoreCase);
+
+    private static string StatusFaq(string? status) => string.IsNullOrWhiteSpace(status) ? "Publicado" : status.Trim();
+
+    private static bool StatusInativo(string? status) => new[] { "Arquivado", "Inativo", "Bloqueado", "Cancelada" }.Contains(status ?? "");
+
+    private static string TituloFaq(AdminRegistroDto dto)
+    {
+        var d = Json(dto.DadosJson);
+        var pergunta = Get(d, "pergunta", "titulo");
+        return string.IsNullOrWhiteSpace(pergunta) ? dto.Titulo.Trim() : pergunta.Trim();
+    }
 }
