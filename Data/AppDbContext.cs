@@ -34,6 +34,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ProcessoSeletivoArquivo> ProcessosSeletivosArquivos => Set<ProcessoSeletivoArquivo>();
     public DbSet<Concurso> Concursos => Set<Concurso>();
     public DbSet<ConcursoArquivo> ConcursosArquivos => Set<ConcursoArquivo>();
+    public DbSet<EstruturaAdministrativa> EstruturasAdministrativas => Set<EstruturaAdministrativa>();
+    public DbSet<CalendarioReuniao> CalendarioReunioes => Set<CalendarioReuniao>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -53,6 +55,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<ConfiguracaoSite>(e => { e.ToTable("configuracoes_site"); e.HasIndex(x=>new { x.Chave, x.UsuarioId }).IsUnique(); MapConfiguracao(e); });
         b.Entity<AdminRegistro>(e => { e.ToTable("admin_registros"); e.HasIndex(x=>x.Tipo); e.HasIndex(x=>x.Ativo); MapAdminRegistro(e); });
         b.Entity<SubmenuPagina>(e => { e.ToTable("submenu_paginas"); e.HasIndex(x=>x.Rota).IsUnique(); e.HasIndex(x=>x.Slug); e.HasIndex(x=>x.Ativo); MapSubmenuPagina(e); });
+        b.Entity<EstruturaAdministrativa>(e => { e.ToTable("camara_estruturas_administrativas"); e.HasIndex(x => x.Ativo); e.HasIndex(x => x.Status); MapEstruturaAdministrativa(e); });
+        b.Entity<CalendarioReuniao>(e => { e.ToTable("camara_calendario_reunioes"); e.HasIndex(x => x.Ativo); e.HasIndex(x => x.Status); e.HasIndex(x => x.DataReuniao); MapCalendarioReuniao(e); });
         b.Entity<ProcessoSeletivo>(e => { e.ToTable("processos_seletivos"); e.HasIndex(x => x.Ativo); e.HasIndex(x => x.Status); e.HasIndex(x => x.DataPublicacao); MapEdital(e); e.HasMany(x => x.Arquivos).WithOne(x => x.ProcessoSeletivo).HasForeignKey(x => x.ProcessoSeletivoId).OnDelete(DeleteBehavior.Cascade); });
         b.Entity<ProcessoSeletivoArquivo>(e => { e.ToTable("processos_seletivos_arquivos"); e.HasIndex(x => x.ProcessoSeletivoId); MapEditalArquivo(e); e.Property(x => x.ProcessoSeletivoId).HasColumnName("processo_seletivo_id"); });
         b.Entity<Concurso>(e => { e.ToTable("concursos"); e.HasIndex(x => x.Ativo); e.HasIndex(x => x.Status); e.HasIndex(x => x.DataPublicacao); MapEdital(e); e.HasMany(x => x.Arquivos).WithOne(x => x.Concurso).HasForeignKey(x => x.ConcursoId).OnDelete(DeleteBehavior.Cascade); });
@@ -84,6 +88,36 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     static void MapAdminRegistro(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<AdminRegistro> e){ Base(e); e.Property(x=>x.UsuarioId).HasColumnName("usuario_id"); e.Property(x=>x.Tipo).HasColumnName("tipo"); e.Property(x=>x.Titulo).HasColumnName("titulo"); e.Property(x=>x.Status).HasColumnName("status"); e.Property(x=>x.DadosJson).HasColumnName("dados_json"); e.Property(x=>x.Ativo).HasColumnName("ativo"); e.Property(x=>x.Entidade).HasColumnName("entidade"); e.Property(x=>x.EntidadeId).HasColumnName("entidade_id"); e.Property(x=>x.CriadoEm).HasColumnName("criado_em"); e.Property(x=>x.AtualizadoEm).HasColumnName("atualizado_em"); }
     static void MapSubmenuPagina(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<SubmenuPagina> e){ Base(e); e.Property(x=>x.UsuarioId).HasColumnName("usuario_id"); e.Property(x=>x.Menu).HasColumnName("menu"); e.Property(x=>x.Pagina).HasColumnName("pagina"); e.Property(x=>x.Slug).HasColumnName("slug"); e.Property(x=>x.Rota).HasColumnName("rota"); e.Property(x=>x.Titulo).HasColumnName("titulo"); e.Property(x=>x.ConteudoHtml).HasColumnName("conteudo_html"); e.Property(x=>x.Imagem).HasColumnName("imagem"); e.Property(x=>x.Arquivo).HasColumnName("arquivo"); e.Property(x=>x.Status).HasColumnName("status"); e.Property(x=>x.Ativo).HasColumnName("ativo"); e.Property(x=>x.CriadoEm).HasColumnName("criado_em"); e.Property(x=>x.AtualizadoEm).HasColumnName("atualizado_em"); }
     static void MapConfiguracao(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<ConfiguracaoSite> e){ Base(e); e.Property(x=>x.UsuarioId).HasColumnName("usuario_id"); e.Property(x=>x.Chave).HasColumnName("chave"); e.Property(x=>x.Valor).HasColumnName("valor"); e.Property(x=>x.Descricao).HasColumnName("descricao"); }
+    static void MapEstruturaAdministrativa(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<EstruturaAdministrativa> e)
+    {
+        Base(e);
+        e.Property(x => x.UsuarioId).HasColumnName("usuario_id");
+        e.Property(x => x.Titulo).HasColumnName("titulo");
+        e.Property(x => x.ConteudoHtml).HasColumnName("conteudo_html");
+        e.Property(x => x.Imagem).HasColumnName("imagem");
+        e.Property(x => x.Arquivo).HasColumnName("arquivo");
+        e.Property(x => x.Status).HasColumnName("status");
+        e.Property(x => x.Ativo).HasColumnName("ativo");
+        e.Property(x => x.CriadoEm).HasColumnName("criado_em");
+        e.Property(x => x.AtualizadoEm).HasColumnName("atualizado_em");
+    }
+
+    static void MapCalendarioReuniao(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<CalendarioReuniao> e)
+    {
+        Base(e);
+        e.Property(x => x.UsuarioId).HasColumnName("usuario_id");
+        e.Property(x => x.Titulo).HasColumnName("titulo");
+        e.Property(x => x.Resumo).HasColumnName("resumo");
+        e.Property(x => x.ConteudoHtml).HasColumnName("conteudo_html");
+        e.Property(x => x.DataReuniao).HasColumnName("data_reuniao");
+        e.Property(x => x.Local).HasColumnName("local");
+        e.Property(x => x.Arquivo).HasColumnName("arquivo");
+        e.Property(x => x.Status).HasColumnName("status");
+        e.Property(x => x.Ativo).HasColumnName("ativo");
+        e.Property(x => x.CriadoEm).HasColumnName("criado_em");
+        e.Property(x => x.AtualizadoEm).HasColumnName("atualizado_em");
+    }
+
     static void MapEdital<TEntity>(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<TEntity> e) where TEntity : EditalBase
     {
         Base(e);

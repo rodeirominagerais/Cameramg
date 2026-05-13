@@ -259,6 +259,37 @@ public class ProjetoResolucao : AtividadeParlamentarBase { }
 public class Diploma : AtividadeParlamentarBase { }
 public class Decreto : AtividadeParlamentarBase { }
 
+
+public class EstruturaAdministrativa
+{
+    public long Id { get; set; }
+    public long? UsuarioId { get; set; }
+    public string Titulo { get; set; } = string.Empty;
+    public string? ConteudoHtml { get; set; }
+    public string? Imagem { get; set; }
+    public string? Arquivo { get; set; }
+    public string Status { get; set; } = "Publicado";
+    public bool Ativo { get; set; } = true;
+    public DateTime CriadoEm { get; set; } = DateTime.UtcNow;
+    public DateTime? AtualizadoEm { get; set; }
+}
+
+public class CalendarioReuniao
+{
+    public long Id { get; set; }
+    public long? UsuarioId { get; set; }
+    public string Titulo { get; set; } = string.Empty;
+    public string? Resumo { get; set; }
+    public string? ConteudoHtml { get; set; }
+    public DateTime? DataReuniao { get; set; }
+    public string? Local { get; set; }
+    public string? Arquivo { get; set; }
+    public string Status { get; set; } = "Publicado";
+    public bool Ativo { get; set; } = true;
+    public DateTime CriadoEm { get; set; } = DateTime.UtcNow;
+    public DateTime? AtualizadoEm { get; set; }
+}
+
 public abstract class EditalBase
 {
     public long Id { get; set; }
