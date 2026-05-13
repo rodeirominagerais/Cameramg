@@ -105,19 +105,40 @@ public class BackupService(AppDbContext db, IWebHostEnvironment env, IOptions<St
     public object Diagnostico(bool googleDriveConfigurado = false)
     {
         var pastas = ResolverPastasArquivos().ToList();
+        var arquivos = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        long tamanhoBytes = 0;
+
+        foreach (var pasta in pastas)
+        {
+            if (!Directory.Exists(pasta)) continue;
+
+            foreach (var file in Directory.EnumerateFiles(pasta, "*", SearchOption.AllDirectories))
+            {
+                if (IgnorarArquivoBackup(file)) continue;
+                if (!arquivos.Add(Path.GetFullPath(file))) continue;
+
+                try
+                {
+                    tamanhoBytes += new FileInfo(file).Length;
+                }
+                catch { }
+            }
+        }
+
+        var totalModulos = 18;
+
         return new
         {
-            contentRoot = env.ContentRootPath,
-            webRoot = env.WebRootPath,
-            storageBasePath = _storage.BasePath,
-            storageBaseUrl = _storage.BaseUrl,
+            arquivosLocalizados = arquivos.Count,
+            totalArquivos = arquivos.Count,
+            tamanhoBytes,
+            tamanhoMb = Math.Round(tamanhoBytes / 1024d / 1024d, 2),
+            totalModulos,
             googleDriveConfigurado,
-            pastasEncontradas = pastas.Select(x => new
-            {
-                caminho = x,
-                totalArquivos = Directory.Exists(x) ? Directory.EnumerateFiles(x, "*", SearchOption.AllDirectories).Count() : 0,
-                tamanhoBytes = Directory.Exists(x) ? Directory.EnumerateFiles(x, "*", SearchOption.AllDirectories).Sum(f => new FileInfo(f).Length) : 0
-            }),
+            storageBaseUrl = _storage.BaseUrl,
+            mensagem = arquivos.Count > 0
+                ? "Arquivos reais localizados para backup."
+                : "Nenhum arquivo físico foi localizado nas pastas configuradas. Verifique se os uploads estão no mesmo serviço do backend ou configure Storage:BasePath para o caminho real/persistente.",
             modulosIncluidos = new[]
             {
                 "usuarios", "categorias", "noticias/publicacoes", "licitacoes", "editais/processos-seletivos", "editais/concursos",
@@ -258,23 +279,81 @@ public class BackupService(AppDbContext db, IWebHostEnvironment env, IOptions<St
 
     private IEnumerable<string> ResolverPastasArquivos()
     {
-        var candidatos = new List<string>();
-        var basePath = string.IsNullOrWhiteSpace(_storage.BasePath) ? "uploads" : _storage.BasePath.Trim('/', '\\');
+        var candidatos = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var basePath = string.IsNullOrWhiteSpace(_storage.BasePath) ? "uploads" : _storage.BasePath.Trim();
 
-        if (Path.IsPathRooted(basePath)) candidatos.Add(basePath);
-        else
+        void Add(string? path)
         {
-            candidatos.Add(Path.Combine(env.ContentRootPath, basePath));
-            candidatos.Add(Path.Combine(env.ContentRootPath, "src", basePath));
-            candidatos.Add(Path.Combine(env.ContentRootPath, "wwwroot", basePath));
-            candidatos.Add(Path.Combine(env.ContentRootPath, "public", basePath));
-            candidatos.Add(Path.Combine(env.ContentRootPath, "src", "public", basePath));
+            if (string.IsNullOrWhiteSpace(path)) return;
+            try
+            {
+                candidatos.Add(Path.GetFullPath(path));
+            }
+            catch { }
         }
 
-        if (!string.IsNullOrWhiteSpace(env.WebRootPath)) candidatos.Add(Path.Combine(env.WebRootPath, "uploads"));
-        candidatos.Add("/var/data/uploads");
+        void AddRelativeRoots(string relative)
+        {
+            relative = relative.Trim('/', '\\');
 
-        return candidatos.Select(Path.GetFullPath).Where(Directory.Exists).Distinct(StringComparer.OrdinalIgnoreCase);
+            Add(Path.Combine(env.ContentRootPath, relative));
+            Add(Path.Combine(env.ContentRootPath, "src", relative));
+            Add(Path.Combine(env.ContentRootPath, "wwwroot", relative));
+            Add(Path.Combine(env.ContentRootPath, "public", relative));
+            Add(Path.Combine(env.ContentRootPath, "src", "public", relative));
+            Add(Path.Combine(AppContext.BaseDirectory, relative));
+            Add(Path.Combine(AppContext.BaseDirectory, "wwwroot", relative));
+
+            if (!string.IsNullOrWhiteSpace(env.WebRootPath))
+            {
+                Add(Path.Combine(env.WebRootPath, relative));
+            }
+        }
+
+        if (Path.IsPathRooted(basePath)) Add(basePath);
+        else AddRelativeRoots(basePath);
+
+        foreach (var relative in new[]
+        {
+            "uploads", "upload", "arquivos", "anexos", "documentos", "docs",
+            "pdf", "pdfs", "imagens", "images", "img", "videos", "video",
+            "media", "midia", "banners", "galeria"
+        })
+        {
+            AddRelativeRoots(relative);
+        }
+
+        Add("/app/uploads");
+        Add("/app/wwwroot/uploads");
+        Add("/app/public/uploads");
+        Add("/opt/render/project/src/uploads");
+        Add("/opt/render/project/src/wwwroot/uploads");
+        Add("/opt/render/project/src/public/uploads");
+        Add("/var/data/uploads");
+        Add("/data/uploads");
+        Add("/storage/uploads");
+
+        foreach (var raiz in new[] { env.ContentRootPath, env.WebRootPath, AppContext.BaseDirectory }
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (!Directory.Exists(raiz)) continue;
+
+            foreach (var dir in Directory.EnumerateDirectories(raiz, "*", SearchOption.AllDirectories))
+            {
+                var nome = Path.GetFileName(dir).ToLowerInvariant();
+                if (nome is "node_modules" or ".git" or "bin" or "obj") continue;
+
+                if (nome is "uploads" or "upload" or "arquivos" or "anexos" or "documentos" or "docs"
+                    or "pdf" or "pdfs" or "imagens" or "images" or "img" or "videos" or "video"
+                    or "media" or "midia" or "banners" or "galeria")
+                {
+                    Add(dir);
+                }
+            }
+        }
+
+        return candidatos.Where(Directory.Exists).Distinct(StringComparer.OrdinalIgnoreCase);
     }
 
     private string? ResolveFile(string? caminho)
@@ -327,13 +406,25 @@ public class BackupService(AppDbContext db, IWebHostEnvironment env, IOptions<St
         await JsonSerializer.SerializeAsync(stream, dados, JsonOptions, ct);
     }
 
+    private static bool IgnorarArquivoBackup(string path)
+    {
+        var p = path.Replace('\\', '/');
+        return p.Contains("/node_modules/", StringComparison.OrdinalIgnoreCase)
+            || p.Contains("/.git/", StringComparison.OrdinalIgnoreCase)
+            || p.Contains("/bin/", StringComparison.OrdinalIgnoreCase)
+            || p.Contains("/obj/", StringComparison.OrdinalIgnoreCase)
+            || p.Contains("/backups-temp/", StringComparison.OrdinalIgnoreCase)
+            || p.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
+            || p.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase);
+    }
+
     private static void AddDirectory(ZipArchive zip, string sourceDir, string zipRoot, HashSet<string> entradasAdicionadas)
     {
         foreach (var file in Directory.EnumerateFiles(sourceDir, "*", SearchOption.AllDirectories))
         {
             var relative = Path.GetRelativePath(sourceDir, file).Replace('\\', '/');
             var entryName = $"{zipRoot}/{relative}";
-            if (entryName.Contains("/node_modules/", StringComparison.OrdinalIgnoreCase) || entryName.Contains("/.git/", StringComparison.OrdinalIgnoreCase) || entryName.Contains("/bin/", StringComparison.OrdinalIgnoreCase) || entryName.Contains("/obj/", StringComparison.OrdinalIgnoreCase)) continue;
+            if (IgnorarArquivoBackup(file)) continue;
             if (!entradasAdicionadas.Add(entryName)) continue;
             zip.CreateEntryFromFile(file, entryName, CompressionLevel.Optimal);
         }
