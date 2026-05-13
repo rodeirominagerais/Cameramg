@@ -53,6 +53,40 @@ public class OuvidoriaEmailService(AppDbContext db, IConfiguration config, ILogg
         }
     }
 
+
+    public async Task EnviarRespostaAsync(OuvidoriaChamado chamado, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(chamado.Email)) return;
+
+        var cfg = await CarregarConfiguracoesAsync(ct);
+        var smtpHost = Pick(cfg, "email_smtp_host", config["Email:SmtpHost"] ?? "");
+        var smtpPort = int.TryParse(Pick(cfg, "email_smtp_port", config["Email:SmtpPort"] ?? "465"), out var porta) ? porta : 465;
+        var smtpUser = Pick(cfg, "email_user", config["Email:User"] ?? "");
+        var smtpPass = Pick(cfg, "email_password", config["Email:Password"] ?? "");
+        var display = Pick(cfg, "email_display_name", config["Email:DisplayName"] ?? "Câmara Municipal de Rodeiro");
+
+        if (string.IsNullOrWhiteSpace(smtpHost) || string.IsNullOrWhiteSpace(smtpUser) || string.IsNullOrWhiteSpace(smtpPass))
+        {
+            logger.LogWarning("SMTP da Ouvidoria não configurado. Resposta do chamado {Protocolo} salva sem envio de e-mail.", chamado.Protocolo);
+            return;
+        }
+
+        using var smtp = new SmtpClient();
+        try
+        {
+            var opt = smtpPort == 465 ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTlsWhenAvailable;
+            await smtp.ConnectAsync(smtpHost, smtpPort, opt, ct);
+            await smtp.AuthenticateAsync(smtpUser, smtpPass, ct);
+            await smtp.SendAsync(MontarEmailRespostaCidadao(display, smtpUser, chamado), ct);
+            await smtp.DisconnectAsync(true, ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Falha ao enviar resposta da Ouvidoria para o chamado {Protocolo}.", chamado.Protocolo);
+            try { if (smtp.IsConnected) await smtp.DisconnectAsync(true, ct); } catch { }
+        }
+    }
+
     private async Task<Dictionary<string, string>> CarregarConfiguracoesAsync(CancellationToken ct)
     {
         var lista = await db.ConfiguracoesSite.AsNoTracking()
@@ -108,6 +142,27 @@ public class OuvidoriaEmailService(AppDbContext db, IConfiguration config, ILogg
 <p>Guarde este número. Para consultar a situação, acesse a página de Ouvidoria e informe o protocolo junto com este e-mail.</p>
 <p><strong>Assunto:</strong> {H(chamado.Assunto)}</p>",
             TextBody = $"Olá, {chamado.Nome}.\n\nSua solicitação foi recebida pela Ouvidoria da Câmara Municipal de Rodeiro.\n\nProtocolo: {chamado.Protocolo}\nStatus inicial: {chamado.Status}\n\nGuarde este número. Para consultar a situação, acesse a página de Ouvidoria e informe o protocolo junto com este e-mail.\n\nAssunto: {chamado.Assunto}"
+        }.ToMessageBody();
+        return msg;
+    }
+
+
+    private static MimeMessage MontarEmailRespostaCidadao(string display, string remetente, OuvidoriaChamado chamado)
+    {
+        var msg = new MimeMessage();
+        msg.From.Add(new MailboxAddress(display, remetente));
+        msg.To.Add(MailboxAddress.Parse(chamado.Email!));
+        msg.Subject = $"Resposta da Ouvidoria - {chamado.Protocolo}";
+        msg.Body = new BodyBuilder
+        {
+            HtmlBody = $@"<p>Olá, {H(chamado.Nome)}.</p>
+<p>Sua solicitação foi atualizada pela Ouvidoria da Câmara Municipal de Rodeiro.</p>
+<p><strong>Protocolo:</strong> {H(chamado.Protocolo)}</p>
+<p><strong>Status:</strong> {H(chamado.Status)}</p>
+<p><strong>Assunto:</strong> {H(chamado.Assunto)}</p>
+<p><strong>Resposta:</strong></p>
+<div style=""white-space:pre-wrap;border:1px solid #ddd;padding:12px;border-radius:8px"">{H(chamado.Resposta)}</div>",
+            TextBody = $"Olá, {chamado.Nome}.\n\nSua solicitação foi atualizada pela Ouvidoria da Câmara Municipal de Rodeiro.\n\nProtocolo: {chamado.Protocolo}\nStatus: {chamado.Status}\nAssunto: {chamado.Assunto}\n\nResposta:\n{chamado.Resposta}"
         }.ToMessageBody();
         return msg;
     }

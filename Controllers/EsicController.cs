@@ -97,8 +97,15 @@ public class EsicController(AppDbContext db, OuvidoriaEmailService emailService,
     public async Task<IActionResult> Atualizar(long id, OuvidoriaUpdateDto dto)
     {
         var c = await db.OuvidoriaChamados.FindAsync(id) ?? throw new InvalidOperationException("Pedido E-Sic não encontrado.");
-        c.Status = string.IsNullOrWhiteSpace(dto.Status) ? c.Status : dto.Status;
-        c.Resposta = dto.Resposta ?? c.Resposta;
+
+        if (!string.IsNullOrWhiteSpace(dto.Nome)) c.Nome = dto.Nome.Trim();
+        if (!string.IsNullOrWhiteSpace(dto.Email)) c.Email = dto.Email.Trim();
+        if (dto.Telefone != null) c.Telefone = dto.Telefone.Trim();
+        if (!string.IsNullOrWhiteSpace(dto.Assunto)) c.Assunto = dto.Assunto.Trim();
+        if (!string.IsNullOrWhiteSpace(dto.Mensagem)) c.Mensagem = dto.Mensagem.Trim();
+        if (!string.IsNullOrWhiteSpace(dto.Status)) c.Status = dto.Status.Trim();
+        if (dto.Resposta != null) c.Resposta = dto.Resposta.Trim();
+
         c.AtualizadoEm = DateTime.UtcNow;
         await db.SaveChangesAsync();
         return NoContent();

@@ -12,7 +12,7 @@ public record PublicacaoDto(string Tipo, bool Destaque, string Titulo, string? R
 public record PaginaDto(string? Chave, string? Titulo, string? ConteudoHtml, string? ImagemCapa, bool Ativo, string? DadosJson = null);
 public record TelefoneDto(string Nome, string Telefone, string? Email, string? Observacao, bool Ativo);
 public record OuvidoriaCreateDto(long? CategoriaId, string? Nome, string? Email, string? Telefone, string Assunto, string Mensagem, string? Tipo = null, string? Prioridade = null);
-public record OuvidoriaUpdateDto(string Status, string? Resposta = null);
+public record OuvidoriaUpdateDto(string? Status, string? Resposta = null, string? Nome = null, string? Email = null, string? Telefone = null, string? Assunto = null, string? Mensagem = null);
 public record ConfiguracaoDto(string Chave, string? Valor, string? Descricao);
 public record ApiPage<T>(IReadOnlyList<T> Itens, int Page, int PageSize, int Total);
 
