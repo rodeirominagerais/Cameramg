@@ -148,8 +148,9 @@ public class EditaisController(AppDbContext db) : ControllerBase
         var item = await db.ProcessosSeletivos.FindAsync(id);
         if (item is null) return NoContent();
         if (!PodeAlterar(item)) return Forbid();
-        item.Ativo = false;
-        item.AtualizadoEm = DateTime.UtcNow;
+        var arquivos = await db.ProcessosSeletivosArquivos.Where(x => x.ProcessoSeletivoId == id).ToListAsync();
+        db.ProcessosSeletivosArquivos.RemoveRange(arquivos);
+        db.ProcessosSeletivos.Remove(item);
         await db.SaveChangesAsync();
         return NoContent();
     }
@@ -190,8 +191,9 @@ public class EditaisController(AppDbContext db) : ControllerBase
         var item = await db.Concursos.FindAsync(id);
         if (item is null) return NoContent();
         if (!PodeAlterar(item)) return Forbid();
-        item.Ativo = false;
-        item.AtualizadoEm = DateTime.UtcNow;
+        var arquivos = await db.ConcursosArquivos.Where(x => x.ConcursoId == id).ToListAsync();
+        db.ConcursosArquivos.RemoveRange(arquivos);
+        db.Concursos.Remove(item);
         await db.SaveChangesAsync();
         return NoContent();
     }

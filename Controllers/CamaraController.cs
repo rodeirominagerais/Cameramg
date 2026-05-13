@@ -109,8 +109,7 @@ public class CamaraController(AppDbContext db) : ControllerBase
         var item = await db.EstruturasAdministrativas.FindAsync(id);
         if (item is null) return NoContent();
         if (!PodeAlterar(item.UsuarioId)) return Forbid();
-        item.Ativo = false;
-        item.AtualizadoEm = DateTime.UtcNow;
+        db.EstruturasAdministrativas.Remove(item);
         await db.SaveChangesAsync();
         return NoContent();
     }
@@ -161,8 +160,7 @@ public class CamaraController(AppDbContext db) : ControllerBase
         var item = await db.CalendarioReunioes.FindAsync(id);
         if (item is null) return NoContent();
         if (!PodeAlterar(item.UsuarioId)) return Forbid();
-        item.Ativo = false;
-        item.AtualizadoEm = DateTime.UtcNow;
+        db.CalendarioReunioes.Remove(item);
         await db.SaveChangesAsync();
         return NoContent();
     }
